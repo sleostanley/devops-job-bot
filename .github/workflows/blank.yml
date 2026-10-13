@@ -2,7 +2,7 @@ name: Daily DevOps Job Fetch
 
 on:
   schedule:
-    - cron: "30 3 * * *"   # 9:00 AM IST
+    - cron: "30 3 * * *"   # 03:30 UTC = 9:00 AM IST
   workflow_dispatch:
 
 permissions:
@@ -11,15 +11,24 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
+
       - run: pip install -r requirements.txt
-      - run: python fetch_jobs.py
+
+      - name: Fetch, score, log
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: python fetch_jobs.py
+
       - name: Commit jobs.csv
         run: |
           if [ -f jobs.csv ]; then
