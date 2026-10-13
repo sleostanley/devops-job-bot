@@ -1,0 +1,23 @@
+NAME: Leo Stanley S
+TITLE: DevOps Engineer (Chennai, India)
+EXPERIENCE: DevOps Engineer, Top Fresher Pvt Ltd, Aug 2025 - Present (about 1 year). BE in Electronics and Communication Engineering (June 2025). DevOps certification course, JSpiders, Bengaluru.
+
+SUMMARY: DevOps Engineer skilled in CI/CD automation, Kubernetes, and cloud infrastructure design. Builds secure, scalable platforms with GitHub Actions, Vault, and Keycloak, with focus on automation, cost optimization, and system reliability.
+
+TECH STACK: GitHub Actions, Kubernetes, Docker, DigitalOcean, AWS, Terraform, HashiCorp Vault, Keycloak, Prometheus, Grafana, PostgreSQL, MongoDB, Jenkins, GitLab, Bash, Linux, WireGuard VPN, VPC, Load Balancers, Harbor registry, Trivy, Gitleaks, SonarQube.
+
+ACHIEVEMENTS:
+- Built a centralized CI/CD platform on GitHub Actions with 15+ reusable workflows, 90% code reuse across projects.
+- Designed self-hosted runners with auto-termination, reducing cloud costs by 40%.
+- Built dynamic preview environments with automated DNS and SSL; automated cleanup of preview environments reduced cloud costs by 65%.
+- Architected a plug-and-play DevOps infrastructure platform automating deployments across environments, reducing deployment time by 50%.
+- Deployed and managed Harbor private container registry with retention policies to remove untagged images.
+- Implemented secure cloud networking using VPC, Load Balancers and WireGuard VPN; enforced VPN-only access with Keycloak and Vault for centralized auth and secrets management.
+- Provisioned and managed Kubernetes clusters with RBAC across Preview, Stage and Production.
+- Built monitoring and alerting with Prometheus and Grafana.
+- Managed PostgreSQL with automated backup, restore and alerting across environments.
+- Deployed and maintained self-hosted apps: Safe Exam Browser infrastructure, Jitsi Meet, Speaches (speech-to-text API), an HRMS application.
+
+SOFT SKILLS: Cross-functional collaboration, troubleshooting, rapid incident response.
+
+CANDIDATE PREFERENCES: Based in Chennai, India. Open to on-site/hybrid in India, UAE, Japan, or fully remote worldwide roles.
