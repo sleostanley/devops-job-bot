@@ -43,6 +43,14 @@ def job(source, title, company, location, url, posted="", salary=""):
             "posted": str(posted or ""), "salary": str(salary or "")}
 
 
+def ts(v):
+    """Unix timestamp -> YYYY-MM-DD (falls back to raw string)."""
+    try:
+        return dt.datetime.fromtimestamp(int(v), dt.timezone.utc).strftime("%Y-%m-%d")
+    except Exception:
+        return str(v or "")
+
+
 def get_json(url):
     r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     r.raise_for_status()
@@ -78,11 +86,11 @@ def fetch_arbeitnow():
     for page in (1, 2, 3):
         data = get_json(f"https://www.arbeitnow.com/api/job-board-api?page={page}")
         for j in data.get("data", []):
-            loc = j.get("location", "")
-            if j.get("remote"):
-                loc = f"Remote / {loc}"
+            if not j.get("remote"):  # remote jobs only
+                continue
+            loc = f"Remote / {j.get('location', '')}"
             out.append(job("arbeitnow", j["title"], j["company_name"], loc,
-                           j["url"], j.get("created_at")))
+                           j["url"], ts(j.get("created_at"))))
         time.sleep(1)
     return out
 
@@ -167,7 +175,8 @@ def main():
     for src in SOURCES:
         try:
             res = src()
-            print(f"{src.__name__}: {len(res)} jobs")
+            hit = sum(1 for j in res if j["url"] and title_ok(j) and location_ok(j))
+            print(f"{src.__name__}: fetched {len(res)}, matched {hit}")
             all_jobs += res
         except Exception as e:  # one dead source shouldn't kill the run
             print(f"{src.__name__} FAILED: {e}", file=sys.stderr)
