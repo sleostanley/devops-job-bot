@@ -1,0 +1,15 @@
+date_added,source,title,company,location,salary,posted,url,score,reason,cover_letter,status
+2026-10-14,remoteok,Golang Kubernetes Engineer,Arango,Worldwide,,2026-09-16T19:00:02+00:00,https://remoteOK.com/remote-jobs/remote-golang-kubernetes-engineer-arango-1137400,55,"The candidate has strong Kubernetes and infrastructure experience but lacks Golang, which is a core requirement for this engineering role.",,skip
+2026-10-14,weworkremotely,IT Infrastructure Engineer,BlueGeko,Anywhere in the World,,"Thu, 08 Oct 2026 07:54:30 +0000",https://weworkremotely.com/remote-jobs/bluegeko-it-infrastructure-engineer,35,"The role strictly requires 4+ years of IT infrastructure experience along with Active Directory and Windows expertise, whereas the candidate has around 1 year of experience primarily in Linux-based DevOps.",,skip
+2026-10-14,weworkremotely,Cloud Engineer,BeyondTrust,Anywhere in the World,,"Wed, 07 Oct 2026 07:30:53 +0000",https://weworkremotely.com/remote-jobs/beyondtrust-cloud-engineer,75,"The candidate has strong direct alignment with AWS, Terraform, and GitHub Actions self-hosted runners, though they have about one year of experience against the requested two years.","Dear Hiring Team,
+
+I am writing to express my interest in the Cloud Engineer role at BeyondTrust. With hands-on experience in cloud infrastructure, Terraform, and CI/CD automation, I specialize in building secure, scalable platforms and automated deployment workflows.
+
+At Top Fresher Pvt Ltd, I architected a centralized CI/CD platform using GitHub Actions with 15+ reusable workflows, achieving 90% code reuse across projects. Additionally, I designed self-hosted runners with auto-termination, which reduced cloud costs by 40%. On the networking and security side, I implemented secure cloud infrastructure using VPCs, Load Balancers, and WireGuard VPN, while enforcing centralized authentication and secrets management through Keycloak and HashiCorp Vault. I also managed Kubernetes clusters with RBAC and established monitoring using Prometheus and Grafana.
+
+I am eager to bring my background in AWS, Terraform automation, and infrastructure security to support BeyondTrust's mission-critical cloud environments. Thank you for your time and consideration.
+
+Sincerely,
+Leo Stanley S",ready
+2026-10-14,weworkremotely,"Engineering Manager, Cloud Engineering",LaunchDarkly,Anywhere in the World,,"Tue, 06 Oct 2026 07:31:09 +0000",https://weworkremotely.com/remote-jobs/launchdarkly-engineering-manager-cloud-engineering,25,"The role is for an Engineering Manager requiring people leadership and management experience, whereas Leo is an early-career individual contributor with one year of experience.",,skip
+2026-10-14,weworkremotely,DevOps Engineer (Remote),thehivecareers.co,Anywhere in the World,,"Fri, 25 Sep 2026 00:33:21 +0000",https://weworkremotely.com/remote-jobs/thehivecareers-co-devops-engineer-remote,40,"The role requires experience as a DevOps or SRE Lead with team mentorship and solution architecture responsibilities, exceeding the candidate's one year of professional experience.",,skip
