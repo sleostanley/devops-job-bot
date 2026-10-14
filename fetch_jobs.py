@@ -196,6 +196,9 @@ def discover_models(api_key):
     return [n for _, n in cands]
 
 
+MODEL_FAILS = {}
+
+
 def call_gemini(prompt, api_key):
     global MODELS
     if MODELS is None:
@@ -203,26 +206,41 @@ def call_gemini(prompt, api_key):
         print(f"Gemini models to try (in order): {MODELS[:5]}")
     body = {"contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"}}
-    while MODELS:
-        model = MODELS[0]
+    for model in list(MODELS):
         url = f"{API_BASE}/models/{model}:generateContent"
         r = None
-        for attempt in range(2):
-            r = requests.post(url, headers={"x-goog-api-key": api_key,
-                                            "Content-Type": "application/json"},
-                              json=body, timeout=90)
+        for attempt in range(3):
+            try:
+                r = requests.post(url, headers={"x-goog-api-key": api_key,
+                                                "Content-Type": "application/json"},
+                                  json=body, timeout=90)
+            except requests.RequestException as e:
+                print(f"  {model}: network error {type(e).__name__}", file=sys.stderr)
+                time.sleep(5)
+                continue
             if r.status_code == 429:
                 time.sleep(25 * (attempt + 1))
                 continue
+            if r.status_code >= 500:  # 500/502/503/504: model overloaded
+                time.sleep(8 * (attempt + 1))
+                continue
             break
-        if r.status_code in (404, 429):
-            print(f"Model {model} unusable (HTTP {r.status_code}), trying next.", file=sys.stderr)
-            MODELS.pop(0)
+        if r is None or r.status_code in (404, 429) or r.status_code >= 500:
+            code = r.status_code if r is not None else "network"
+            MODEL_FAILS[model] = MODEL_FAILS.get(model, 0) + 1
+            hard = code == 404 or MODEL_FAILS[model] >= 2
+            print(f"  {model} failed (HTTP {code})" + (", dropping it." if hard else ", trying next."),
+                  file=sys.stderr)
+            if hard and model in MODELS:
+                MODELS.remove(model)
             continue
-        r.raise_for_status()
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
-    raise RuntimeError("No usable Gemini model found for this API key")
+        r.raise_for_status()  # 400/403 etc: real problem (bad key, bad request)
+        try:
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
+        except (KeyError, IndexError, ValueError):
+            raise RuntimeError(f"{model}: unexpected/blocked response")
+    raise RuntimeError("No usable Gemini model right now (all failed)")
 
 
 def score_job(profile, j, api_key):
