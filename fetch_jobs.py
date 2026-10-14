@@ -30,7 +30,7 @@ ALLOWED_LOCATIONS = [
     "japan", "tokyo", "osaka", "asia", "apac",
 ]
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# Optional override: set GEMINI_MODEL env/secret to force a model. Otherwise auto-discovered.
 SCORE_THRESHOLD = 70        # score >= this -> status "ready" + cover letter
 MAX_SCORE_PER_RUN = 40      # free-tier safety cap per daily run
 SLEEP_BETWEEN_CALLS = 7     # seconds (keeps under ~10 requests/min)
@@ -165,21 +165,64 @@ If score >= {threshold}, also write a cover letter: max 170 words, addressed to 
 Respond with ONLY JSON: {{"score": <int>, "reason": "<one short sentence>", "cover_letter": "<text or empty>"}}"""
 
 
+API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+MODELS = None  # filled on first call
+
+
+def discover_models(api_key):
+    """Ask Google which models exist right now; prefer newest stable Flash."""
+    override = os.environ.get("GEMINI_MODEL")
+    if override:
+        return [override]
+    r = requests.get(f"{API_BASE}/models?pageSize=200",
+                     headers={"x-goog-api-key": api_key}, timeout=30)
+    r.raise_for_status()
+    skip = ("image", "live", "audio", "tts", "native", "embedding",
+            "robotics", "computer", "exp", "thinking")
+    cands = []
+    for m in r.json().get("models", []):
+        name = m["name"].split("/")[-1]
+        if "generateContent" not in m.get("supportedGenerationMethods", []):
+            continue
+        if not name.startswith("gemini-") or "flash" not in name:
+            continue
+        if any(x in name for x in skip):
+            continue
+        v = re.match(r"gemini-(\d+(?:\.\d+)?)", name)
+        ver = float(v.group(1)) if v else 0.0
+        # order: non-lite, non-preview, highest version first
+        cands.append((("lite" in name, "preview" in name, -ver), name))
+    cands.sort()
+    return [n for _, n in cands]
+
+
 def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    global MODELS
+    if MODELS is None:
+        MODELS = discover_models(api_key)
+        print(f"Gemini models to try (in order): {MODELS[:5]}")
     body = {"contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"}}
-    for attempt in range(4):
-        r = requests.post(url, headers={"x-goog-api-key": api_key,
-                                        "Content-Type": "application/json"},
-                          json=body, timeout=90)
-        if r.status_code == 429:
-            time.sleep(20 * (attempt + 1))
+    while MODELS:
+        model = MODELS[0]
+        url = f"{API_BASE}/models/{model}:generateContent"
+        r = None
+        for attempt in range(2):
+            r = requests.post(url, headers={"x-goog-api-key": api_key,
+                                            "Content-Type": "application/json"},
+                              json=body, timeout=90)
+            if r.status_code == 429:
+                time.sleep(25 * (attempt + 1))
+                continue
+            break
+        if r.status_code in (404, 429):
+            print(f"Model {model} unusable (HTTP {r.status_code}), trying next.", file=sys.stderr)
+            MODELS.pop(0)
             continue
         r.raise_for_status()
         text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         return json.loads(text)
-    raise RuntimeError("Gemini rate limit (429) after retries")
+    raise RuntimeError("No usable Gemini model found for this API key")
 
 
 def score_job(profile, j, api_key):
