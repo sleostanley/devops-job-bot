@@ -4,6 +4,7 @@ Logs to Google Sheets if GOOGLE_CREDS_JSON + SHEET_ID are set, else to jobs.csv.
 Scoring is skipped if GEMINI_API_KEY is not set.
 """
 import csv
+import html
 import json
 import os
 import re
@@ -20,7 +21,24 @@ KEYWORDS = [
     "terraform", "cloud engineer", "infrastructure engineer", "aws engineer",
     "ci/cd", "release engineer", "devsecops",
 ]
-EXCLUDE = ["intern", "internship", "sales", "marketing", "recruiter", "designer"]
+EXCLUDE = [
+    "intern", "internship", "sales", "marketing", "recruiter", "designer",
+    # too senior for ~1 yr experience (saves Gemini quota). Remove words to widen the net.
+    "senior", "sr", "staff", "principal", "lead", "head", "director", "manager",
+    "vp", "vice president", "architect",
+]
+EXCLUDE_RE = re.compile(r"\b(" + "|".join(re.escape(x) for x in EXCLUDE) + r")\b", re.I)
+
+# Company career boards (free public APIs, no key). Token = the name in the careers URL:
+#   boards.greenhouse.io/<token>   jobs.lever.co/<token>   jobs.ashbyhq.com/<token>
+# Wrong/missing tokens just log "not found" - edit these lists freely.
+GREENHOUSE = [
+    "cloudflare", "datadog", "gitlab", "stripe", "databricks", "coinbase", "twilio",
+    "elastic", "mongodb", "okta", "pagerduty", "grafanalabs", "samsara", "discord",
+    "figma", "asana", "dropbox", "reddit", "fastly", "hashicorp", "postman",
+]
+LEVER = ["palantir", "plaid", "spotify"]
+ASHBY = ["ramp", "notion", "linear", "supabase", "deel"]
 
 # Empty list = accept all. "worldwide"/"anywhere"/"global" always pass when list is non-empty.
 ALLOWED_LOCATIONS = [
@@ -33,6 +51,7 @@ ALLOWED_LOCATIONS = [
 # Optional override: set GEMINI_MODEL env/secret to force a model. Otherwise auto-discovered.
 SCORE_THRESHOLD = 70        # score >= this -> status "ready" + cover letter
 MAX_SCORE_PER_RUN = 40      # free-tier safety cap per daily run
+MAX_SCORING_SECONDS = 600   # stop scoring after 10 min so the run never hangs
 SLEEP_BETWEEN_CALLS = 7     # seconds (keeps under ~10 requests/min)
 RESUME_PATH = "resume_profile.txt"
 
@@ -124,13 +143,87 @@ def fetch_wwr():
     return out
 
 
-SOURCES = [fetch_remotive, fetch_remoteok, fetch_arbeitnow, fetch_wwr]
+def _board_get(url):
+    """GET json; returns None if board doesn't exist (404)."""
+    r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json()
+
+
+def fetch_greenhouse():
+    out = []
+    for tok in GREENHOUSE:
+        try:
+            data = _board_get(f"https://boards-api.greenhouse.io/v1/boards/{tok}/jobs?content=true")
+        except Exception as e:
+            print(f"  greenhouse/{tok}: error {type(e).__name__}", file=sys.stderr)
+            continue
+        if data is None:
+            print(f"  greenhouse/{tok}: board not found")
+            continue
+        for j in data.get("jobs", []):
+            out.append(job("greenhouse", j.get("title"), tok,
+                           (j.get("location") or {}).get("name"), j.get("absolute_url"),
+                           (j.get("updated_at") or "")[:10], "",
+                           html.unescape(j.get("content") or "")))
+        time.sleep(0.3)
+    return out
+
+
+def fetch_lever():
+    out = []
+    for tok in LEVER:
+        try:
+            data = _board_get(f"https://api.lever.co/v0/postings/{tok}?mode=json")
+        except Exception as e:
+            print(f"  lever/{tok}: error {type(e).__name__}", file=sys.stderr)
+            continue
+        if data is None:
+            print(f"  lever/{tok}: board not found")
+            continue
+        for j in data:
+            cat = j.get("categories") or {}
+            created = j.get("createdAt")
+            out.append(job("lever", j.get("text"), tok, cat.get("location"),
+                           j.get("hostedUrl"),
+                           ts(int(created) // 1000) if created else "", "",
+                           j.get("descriptionPlain")))
+        time.sleep(0.3)
+    return out
+
+
+def fetch_ashby():
+    out = []
+    for tok in ASHBY:
+        try:
+            data = _board_get(f"https://api.ashbyhq.com/posting-api/job-board/{tok}")
+        except Exception as e:
+            print(f"  ashby/{tok}: error {type(e).__name__}", file=sys.stderr)
+            continue
+        if data is None:
+            print(f"  ashby/{tok}: board not found")
+            continue
+        for j in data.get("jobs", []):
+            loc = j.get("location") or ""
+            if j.get("isRemote") and "remote" not in loc.lower():
+                loc = f"Remote / {loc}"
+            out.append(job("ashby", j.get("title"), tok, loc, j.get("jobUrl"),
+                           (j.get("publishedAt") or "")[:10], "",
+                           j.get("descriptionPlain")))
+        time.sleep(0.3)
+    return out
+
+
+SOURCES = [fetch_remotive, fetch_remoteok, fetch_arbeitnow, fetch_wwr,
+           fetch_greenhouse, fetch_lever, fetch_ashby]
 
 
 # ---------------- FILTERS ----------------
 def title_ok(j):
     t = j["title"].lower()
-    return any(k in t for k in KEYWORDS) and not any(x in t for x in EXCLUDE)
+    return any(k in t for k in KEYWORDS) and not EXCLUDE_RE.search(t)
 
 
 def location_ok(j):
@@ -209,26 +302,26 @@ def call_gemini(prompt, api_key):
     for model in list(MODELS):
         url = f"{API_BASE}/models/{model}:generateContent"
         r = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 r = requests.post(url, headers={"x-goog-api-key": api_key,
                                                 "Content-Type": "application/json"},
-                                  json=body, timeout=90)
+                                  json=body, timeout=45)
             except requests.RequestException as e:
                 print(f"  {model}: network error {type(e).__name__}", file=sys.stderr)
                 time.sleep(5)
                 continue
             if r.status_code == 429:
-                time.sleep(25 * (attempt + 1))
+                time.sleep(15 * (attempt + 1))
                 continue
             if r.status_code >= 500:  # 500/502/503/504: model overloaded
-                time.sleep(8 * (attempt + 1))
+                time.sleep(5 * (attempt + 1))
                 continue
             break
         if r is None or r.status_code in (404, 429) or r.status_code >= 500:
             code = r.status_code if r is not None else "network"
             MODEL_FAILS[model] = MODEL_FAILS.get(model, 0) + 1
-            hard = code == 404 or MODEL_FAILS[model] >= 2
+            hard = True  # drop a model for this run as soon as it fails after retries
             print(f"  {model} failed (HTTP {code})" + (", dropping it." if hard else ", trying next."),
                   file=sys.stderr)
             if hard and model in MODELS:
@@ -306,8 +399,13 @@ def main():
     for src in SOURCES:
         try:
             res = src()
-            hit = sum(1 for j in res if j["url"] and title_ok(j) and location_ok(j))
-            print(f"{src.__name__}: fetched {len(res)}, matched {hit}")
+            t_ok = [j for j in res if j["url"] and title_ok(j)]
+            l_ok = [j for j in t_ok if location_ok(j)]
+            print(f"{src.__name__}: fetched {len(res)} | title ok {len(t_ok)} | "
+                  f"location ok {len(l_ok)}")
+            rej = sorted({j["location"] for j in t_ok if not location_ok(j)})[:4]
+            if rej:
+                print(f"    location rejected e.g.: {rej}")
             all_jobs += res
         except Exception as e:  # one dead source shouldn't kill the run
             print(f"{src.__name__} FAILED: {e}", file=sys.stderr)
@@ -331,7 +429,11 @@ def main():
         with open(RESUME_PATH, encoding="utf-8") as f:
             profile = f.read()
         to_log, fails = [], 0
+        started = time.time()
         for j in fresh[:MAX_SCORE_PER_RUN]:
+            if time.time() - started > MAX_SCORING_SECONDS:
+                print("Scoring time budget reached, stopping.", file=sys.stderr)
+                break
             try:
                 j.update(score_job(profile, j, api_key))
                 to_log.append(j)
